@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Papa from 'papaparse';
-import { Search, Loader2, Package, Hash, Text, AlertCircle, X } from 'lucide-react';
+import { Search, Loader2, Package, Hash, Text, AlertCircle, X, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { StockItem } from './types';
 
@@ -14,6 +14,7 @@ const CSV_URL = 'https://docs.google.com/spreadsheets/d/1k4_Bd8rRT91sTtpE8EgWQbQ
 export default function App() {
   const [stock, setStock] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<StockItem[]>([]);
@@ -35,9 +36,11 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchStockData = async () => {
+  const fetchStockData = async (isManual = false) => {
     try {
-      setLoading(true);
+      if (isManual) setRefreshing(true);
+      else setLoading(true);
+      
       const response = await fetch(CSV_URL);
       if (!response.ok) throw new Error('Failed to fetch stock data');
       const csvText = await response.text();
@@ -55,15 +58,24 @@ export default function App() {
           
           setStock(mappedData);
           setLoading(false);
+          setRefreshing(false);
+
+          // Update selected item if it exists to show new stock levels
+          if (selectedItem) {
+            const updated = mappedData.find(i => i.code === selectedItem.code);
+            if (updated) setSelectedItem(updated);
+          }
         },
         error: (err: Error) => {
           setError(err.message);
           setLoading(false);
+          setRefreshing(false);
         }
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -125,20 +137,42 @@ export default function App() {
   return (
     <div className="min-h-screen max-w-lg mx-auto p-4 flex flex-col pt-8 sm:pt-12">
       {/* Header */}
-      <header className="mb-8 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-center gap-3 mb-2"
-        >
-          <div className="p-3 bg-dracula-purple/20 rounded-2xl">
-            <Package className="w-8 h-8 text-dracula-purple" />
-          </div>
-          <h1 className="text-2xl font-black tracking-tight text-dracula-fg">
-            STOCK<span className="text-dracula-purple">LOG</span>
-          </h1>
-        </motion.div>
-        <p className="text-dracula-comment text-sm">Inventory Manager & Search</p>
+      <header className="mb-8 relative">
+        <div className="absolute right-0 top-0">
+          <button
+            onClick={() => fetchStockData(true)}
+            disabled={refreshing}
+            className={`p-3 rounded-2xl bg-dracula-selection text-dracula-purple hover:bg-dracula-purple/10 transition-all ${refreshing ? 'opacity-50' : 'active:scale-95'}`}
+            title="Refresh Stock Data"
+          >
+            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+        
+        <div className="text-center">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-center gap-3 mb-2"
+          >
+            <div className="p-3 bg-dracula-purple/20 rounded-2xl">
+              <Package className="w-8 h-8 text-dracula-purple" />
+            </div>
+            <h1 className="text-2xl font-black tracking-tight text-dracula-fg">
+              STOCK<span className="text-dracula-purple">LOG</span>
+            </h1>
+          </motion.div>
+          <p className="text-dracula-comment text-sm">Inventory Manager & Search</p>
+          {refreshing && (
+            <motion.p 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-dracula-cyan text-[10px] font-bold mt-2 animate-pulse uppercase tracking-widest"
+            >
+              Updating Database...
+            </motion.p>
+          )}
+        </div>
       </header>
 
       {/* Search Section */}
